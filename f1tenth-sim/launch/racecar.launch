@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+
+<launch>
+  
+  <!-- car properties -->
+  <arg name='car_name' default='car_1' />
+  <arg name='x' default='0.0' />
+  <arg name='y' default='0.0' />
+  <arg name='z' default='0.05' />
+  <arg name='yaw' default='0.0' />
+  <arg name='paint' default='Yellow' />
+  <arg name='world_name' default='racecar_tunnel' />
+  
+  <!-- gazebo properties -->
+  <arg name="paused" default="false"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>  
+  
+  <!-- launch map to  odom tf -->
+  <node name='map_odom_link' pkg='tf' type='static_transform_publisher' args='0.0 0.0 0.0 0.0 0.0 0.0 map odom 100' />
+  
+  <include file='$(find gazebo_ros)/launch/empty_world.launch'>
+    <arg name='world_name' value='$(find racecar_worlds)/worlds/$(arg world_name).world' />
+    <arg name='gui' value='$(arg gui)' />
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="verbose" value="false"/>      
+  </include>
+
+  <!-- reset racecar to pit stop -->
+  <node name='$(arg car_name)_pit_stop_reset' pkg='f1tenth-sim' type='set_racecar_state.py' args='$(arg car_name)' />
+
+  <!-- spawn car using the set global parameters -->
+  <include file='$(find f1tenth-sim)/config/vehicle_class.launch.xml'>
+    <arg name='car_name' value='$(arg car_name)' />
+    <arg name='x_pos' value='$(arg x)' />
+    <arg name='y_pos' value='$(arg y)' />
+    <arg name='z_pos' value='$(arg z)' />
+    <arg name='yaw' value='$(arg yaw)' />
+    <arg name='paint' value='$(arg paint)' />
+  </include>
+  
+</launch>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
