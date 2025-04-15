@@ -125,7 +125,7 @@ class PurePursuit(object):
             # finding the distance of each way point from the current position
             for i in range(len(self.path_points_x)):
                 self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
-                print(f"[LENGTHS X AND Y] iX: {self.path_points_x[i]}, iY: {self.path_points_y[i]}, currX: {curr_x}, currY: {curr_y}")
+                # print(f"[LENGTHS X AND Y] iX: {self.path_points_x[i]}, iY: {self.path_points_y[i]}, currX: {curr_x}, currY: {curr_y}")
             print(f"[DISTANCES] First 5 distances: {self.dist_arr[:5]}")
             print(f"[CURRENT] curr_x: {curr_x}, curr_y: {curr_y}, look_ahead: {self.look_ahead}")
             # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
