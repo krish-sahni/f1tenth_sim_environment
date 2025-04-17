@@ -41,7 +41,7 @@ class PurePursuit(object):
 
         self.rate = rospy.Rate(50)
 
-        self.look_ahead = 0.03 # 4
+        self.look_ahead = 0.3 # 4
         self.wheelbase  = 0.325 # meters
         self.offset     = 0.15 # meters        
         
@@ -129,15 +129,15 @@ class PurePursuit(object):
             print(f"[DISTANCES] First 5 distances: {self.dist_arr[:5]}")
             print(f"[CURRENT] curr_x: {curr_x}, curr_y: {curr_y}, look_ahead: {self.look_ahead}")
             # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
-            goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.05) & (self.dist_arr > self.look_ahead - 0.05) )[0]
+            goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.1) & (self.dist_arr > self.look_ahead - 0.1) )[0]
             print(f"[GOAL SELECTION] Candidates within lookahead: {goal_arr}")
 
-            if len(goal_arr) > 0:
-                self.goal = goal_arr[0]
-            else:
-                print("[WARNING] No goal point found within lookahead window.")
-                self.rate.sleep()
-                continue
+            # if len(goal_arr) > 0:
+            #     self.goal = goal_arr[0]
+            # else:
+            #     print("[WARNING] No goal point found within lookahead window.")
+            #     self.rate.sleep()
+            #     continue
 
 
 
@@ -151,14 +151,14 @@ class PurePursuit(object):
             # finding the goal point which is the last in the set of points less than the lookahead distance
 
 
-            # for idx in goal_arr:
-            #     v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
-            #     v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
-            #     temp_angle = self.find_angle(v1,v2)
-            #     # find correct look-ahead point by using heading information
-            #     if abs(temp_angle) < np.pi/2:
-            #         self.goal = idx
-            #         break
+            for idx in goal_arr:
+                v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
+                v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
+                temp_angle = self.find_angle(v1,v2)
+                # find correct look-ahead point by using heading information
+                if abs(temp_angle) < np.pi/2:
+                    self.goal = idx
+                    break
 
 
 

@@ -7,6 +7,8 @@ import sys
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 
+from std_msgs.msg import Float64
+
 car_name         = str(sys.argv[1])
 acceptable_reset = ['true', 'True', '1', '1.0']
 loop_quit        = False
@@ -16,7 +18,7 @@ loop_quit        = False
 # x_vel          = float(sys.argv[5])
 # y_vel          = float(sys.argv[6])
 # z_vel          = float(sys.argv[7])
-car_1_reset_pose = [-9.0, -5.0,  0.0]
+car_1_reset_pose = [0.0,0.0,0.0]
 car_2_reset_pose = [-7.0, -5.0,  0.0]
 car_3_reset_pose = [-5.0, -5.0,  0.0]
 car_4_reset_pose = [-3.0, -5.0,  0.0]
@@ -33,9 +35,12 @@ def racecar_reset_state():
 
     state_msg = ModelState()
     state_msg.model_name = car_name
-    exec('state_msg.pose.position.x = {}_reset_pose[0]'.format(car_name))
-    exec('state_msg.pose.position.y = {}_reset_pose[1]'.format(car_name))
-    exec('state_msg.pose.position.z = {}_reset_pose[2]'.format(car_name))
+    # exec('state_msg.pose.position.x = {}_reset_pose[0]'.format(car_name))
+    # exec('state_msg.pose.position.y = {}_reset_pose[1]'.format(car_name))
+    # exec('state_msg.pose.position.z = {}_reset_pose[2]'.format(car_name))
+    exec('state_msg.pose.position.x = -0.15')
+    exec('state_msg.pose.position.y = 0')
+    exec('state_msg.pose.position.z = 0')
     state_msg.pose.orientation.x = 0.0
     state_msg.pose.orientation.y = 0.0
     state_msg.pose.orientation.z = 0.0
@@ -50,11 +55,37 @@ def racecar_reset_state():
 
         print("Service call failed: %s" % error_msg)
 
+
+def stop_car(car_name):
+    zero = Float64()
+    zero.data = 0.0
+
+    wheel_topics = [
+        f"/{car_name}/left_rear_wheel_velocity_controller/command",
+        f"/{car_name}/right_rear_wheel_velocity_controller/command",
+        f"/{car_name}/left_front_wheel_velocity_controller/command",
+        f"/{car_name}/right_front_wheel_velocity_controller/command",
+        f"/{car_name}/left_steering_hinge_position_controller/command",
+        f"/{car_name}/right_steering_hinge_position_controller/command"
+    ]
+
+    pubs = [rospy.Publisher(topic, Float64, queue_size=1) for topic in wheel_topics]
+
+    # Publish zeros for a few iterations to ensure it gets picked up
+    for _ in range(10):
+        for pub in pubs:
+            pub.publish(zero)
+        rospy.sleep(0.1)
+
+
+
+
 if __name__ == '__main__':
     try:
         while not loop_quit:
             if str(rospy.get_param('/{}/reset_to_pit_stop'.format(car_name))) in acceptable_reset:
                 racecar_reset_state()
+                # stop_car(car_name)
                 rospy.set_param('/{}/reset_to_pit_stop'.format(car_name), 'False')
     except rospy.ROSInterruptException:
         pass
