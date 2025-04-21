@@ -137,8 +137,8 @@ def command_callback(data):
 
     steering_angle = Float64()
     speed          = Float64()
-
     steering_angle.data = data.steering_angle * 0.65
+    # steering_angle.data = data.steering_angle * 0.65
     speed.data          = data.speed * max_speed
 
     '''
