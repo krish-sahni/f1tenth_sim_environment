@@ -52,7 +52,7 @@ class PurePursuit(object):
         self.ctrl_pub  = rospy.Publisher("/car_1/offboard/command", AckermannDrive, queue_size=1)
         self.drive_msg = AckermannDrive()
         # self.drive_msg.header.frame_id = "f1tenth_control"
-        self.drive_msg.speed     = 1.3 # m/s, reference speed
+        self.drive_msg.speed     = 0.3 # m/s, reference speed
 
         # self.vicon_sub = rospy.Subscriber('/car_state', Float64MultiArray, self.carstate_callback)
         self.gt_sub = rospy.Subscriber('/car_1/ground_truth', Odometry, self.carstate_callback_gt)
