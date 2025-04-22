@@ -1,0 +1,6 @@
+<launch>
+  <param name="model_path" value="$(find f1tenth-sim)/models/waypoint_marker"/>
+  <param name="waypoint_csv" value="$(find f1tenth-sim)/waypoints/xyhead_demo_pp.csv"/>
+
+  <node name="spawn_waypoints_gazebo" pkg="f1tenth-sim" type="spawn_waypoint_markers.py" output="screen"/>
+</launch>
