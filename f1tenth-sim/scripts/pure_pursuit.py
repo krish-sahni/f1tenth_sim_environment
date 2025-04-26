@@ -43,7 +43,7 @@ class PurePursuit(object):
 
         self.rate = rospy.Rate(50)
 
-        self.look_ahead = 0.3 # 4
+        self.look_ahead = 0.2 # 4
         # self.wheelbase  = 0.325 # meters
         # self.offset     = 0.15 # meters      
         self.wheelbase  = 0.325 # meters
@@ -140,7 +140,7 @@ class PurePursuit(object):
                 v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
                 temp_angle = self.find_angle(v1,v2)
                 # find correct look-ahead point by using heading information
-                if abs(temp_angle) < np.pi/2:
+                if abs(temp_angle) < np.pi/1.6:
                     self.goal = idx
                     break
             print(f"goal_chosen: {self.goal}")

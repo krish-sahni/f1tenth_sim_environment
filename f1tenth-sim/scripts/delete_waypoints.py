@@ -7,7 +7,7 @@ def main():
     rospy.wait_for_service('/gazebo/delete_model')
     delete = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
 
-    for i in range(501):  # 0 through 500 inclusive
+    for i in range(1000):  # 0 through 500 inclusive
         model_name = f'waypoint_marker_{i}'
         try:
             delete(model_name)
