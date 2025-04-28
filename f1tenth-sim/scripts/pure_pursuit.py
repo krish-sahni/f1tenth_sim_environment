@@ -70,6 +70,7 @@ class PurePursuit(object):
         quat = carstate_msg.pose.pose.orientation
         euler = tf.transformations.euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
         self.yaw = np.degrees(euler[2])  # Or keep in radians if needed
+        print(f"velocity: {carstate_msg.twist.twist.linear.x}")
 
         
     def carstate_callback(self, carstate_msg):

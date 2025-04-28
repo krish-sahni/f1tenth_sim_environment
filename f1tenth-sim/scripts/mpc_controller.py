@@ -81,12 +81,12 @@ class MPCController:
             x_next = ( self.Ad_p @ self.x[:,k]
                      + self.Bd_p @ self.u[:,k]
                      + self.Cd_p )
-            cons += [ self.x[:,k+1] == x_next,
-                      cp.abs(self.u[0,k])   <= self.max_steer,
-                      self.u[1,k]           <= self.max_accel,
-                      self.u[1,k]           >= -self.max_accel,
-                      self.x[3,k]           >= 0,
-                      self.x[3,k]           <= self.max_speed ]
+            cons += [ self.x[:,k+1] == x_next,]
+                    #   cp.abs(self.u[0,k])   <= self.max_steer,
+                    #   self.u[1,k]           <= self.max_accel,
+                    #   self.u[1,k]           >= -self.max_accel,
+                    #   self.x[3,k]           >= 0,
+                    #   self.x[3,k]           <= self.max_speed ]
 
         cost += cp.quad_form(self.x[:,self.N] - self.ref_traj[:,self.N], self.Q)
         print(f"cons: {cons}")
@@ -94,9 +94,15 @@ class MPCController:
 
     def get_reference_trajectory(self):
         _, idx = self.waypoint_tree.query(self.current_pose[:2])
+        print(f"closest waypoint: {idx}")
+
         inds = np.clip(np.arange(idx, idx+self.N+1),
                        0, len(self.waypoints)-1)
+        print(f"waypoint indices: {inds}")
+
         pts = self.waypoints[inds]
+        print(f"waypoints: {pts}")
+        
         ref = np.zeros((4, self.N+1))
         for k,(x_ref,y_ref) in enumerate(pts):
             if k>0:
@@ -167,7 +173,7 @@ class MPCController:
         cmd = AckermannDrive()
         cmd.steering_angle = steer
         cmd.speed          = speed
-        self.drive_pub.publish(cmd)
+        # self.drive_pub.publish(cmd)
 
 if __name__=='__main__':
     try:
