@@ -22,7 +22,7 @@ class MPCController:
         self.dt         = 0.1       # s
 
         # MPC params
-        self.N  = 30
+        self.N  = 10
         self.Q  = np.diag([10., 10., 5., 1.])
         self.R  = np.diag([100., 10.])
         self.Rd = np.diag([10., 1.])
@@ -130,6 +130,13 @@ class MPCController:
 
     #     return ref
 
+    def unwrap_angle(self, angle, prev_angle):
+        delta = angle - prev_angle
+        while delta > np.pi:
+            delta -= 2*np.pi
+        while delta < -np.pi:
+            delta += 2*np.pi
+        return prev_angle + delta
 
     def get_reference_trajectory(self):
         _, idx = self.waypoint_tree.query(self.current_pose[:2])
@@ -146,7 +153,8 @@ class MPCController:
         for k,(x_ref,y_ref) in enumerate(pts):
             if k>0:
                 dx,dy = pts[k]-pts[k-1]
-                yaw_ref = math.atan2(dy,dx)
+                raw_yaw = math.atan2(dy, dx)
+                yaw_ref = self.unwrap_angle(raw_yaw, ref[2, k-1])
             else:
                 yaw_ref = self.current_pose[2]
             ref[:,k] = [x_ref, y_ref, yaw_ref, self.max_speed]
