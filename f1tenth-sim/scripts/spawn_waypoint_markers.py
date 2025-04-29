@@ -43,7 +43,9 @@ def main():
     with open(waypoint_csv) as f:
         reader = csv.reader(f)
         for i, row in enumerate(reader):
-            x, y, _ = map(float, row)
+            if i < 150:
+                continue
+            x, y = map(float, row)
             pose = Pose(position=Point(x=x, y=y, z=0.05), orientation=Quaternion(0, 0, 0, 1))
             model_name = f"waypoint_marker_{i}"
             try:
@@ -55,6 +57,7 @@ def main():
 
     # Keep the node alive
     rospy.spin()
+
 
 if __name__ == '__main__':
     main()

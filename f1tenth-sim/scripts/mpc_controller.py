@@ -16,13 +16,13 @@ class MPCController:
 
         # Vehicle params
         self.wheelbase  = 0.325     # m
-        self.max_steer  = np.deg2rad(17.2)
-        self.max_speed  = 0.3       # m/s
+        self.max_steer  = np.deg2rad(30)
+        self.max_speed  = 0.5       # m/s
         self.max_accel  = 3.0       # m/s²
         self.dt         = 0.1       # s
 
         # MPC params
-        self.N  = 10
+        self.N  = 30
         self.Q  = np.diag([10., 10., 5., 1.])
         self.R  = np.diag([100., 10.])
         self.Rd = np.diag([10., 1.])
@@ -47,15 +47,31 @@ class MPCController:
 
     def read_waypoints(self):
         fn = os.path.join(os.path.dirname(__file__),
-                          '../waypoints/xyhead_demo_pp.csv')
+                        '../waypoints/xyhead_demo_pp.csv')
         pts = []
         with open(fn,'r') as f:
             for row in csv.reader(f):
-                x,y,_ = row
+                x,y = row
                 pts.append((float(x), float(y)))
-        self.waypoints     = np.array(pts)
+
+        pts = np.array(pts)
+        pts = pts[::5]  # <--- Keep every 5th waypoint only (adjust if needed)
+
+        self.waypoints = pts
         self.waypoint_tree = KDTree(self.waypoints)
-        rospy.loginfo(f"Loaded {len(pts)} waypoints")
+        rospy.loginfo(f"Loaded {len(pts)} waypoints after downsampling")
+
+    # def read_waypoints(self):
+    #     fn = os.path.join(os.path.dirname(__file__),
+    #                       '../waypoints/xyhead_demo_pp.csv')
+    #     pts = []
+    #     with open(fn,'r') as f:
+    #         for row in csv.reader(f):
+    #             x,y,_ = row
+    #             pts.append((float(x), float(y)))
+    #     self.waypoints     = np.array(pts)
+    #     self.waypoint_tree = KDTree(self.waypoints)
+    #     rospy.loginfo(f"Loaded {len(pts)} waypoints")
 
     def setup_mpc(self):
         # decision vars
@@ -81,16 +97,39 @@ class MPCController:
             x_next = ( self.Ad_p @ self.x[:,k]
                      + self.Bd_p @ self.u[:,k]
                      + self.Cd_p )
-            cons += [ self.x[:,k+1] == x_next,]
+            cons += [ self.x[:,k+1] == x_next]
                     #   cp.abs(self.u[0,k])   <= self.max_steer,
                     #   self.u[1,k]           <= self.max_accel,
                     #   self.u[1,k]           >= -self.max_accel,
-                    #   self.x[3,k]           >= 0,
-                    #   self.x[3,k]           <= self.max_speed ]
+                    #   self.x[3,k]           >= -0.05,
+                    #   self.x[3,k]           <= self.max_speed]
 
         cost += cp.quad_form(self.x[:,self.N] - self.ref_traj[:,self.N], self.Q)
         print(f"cons: {cons}")
         self.prob = cp.Problem(cp.Minimize(cost), cons)
+
+
+
+    # def get_reference_trajectory(self):
+    # # Create a temp reference trajectory that makes the car turn right
+
+    #     ref = np.zeros((4, self.N+1))
+    #     x0, y0, yaw0, v0 = self.current_pose  # Starting point
+
+    #     radius = 1.0  # meters, radius of the circle
+    #     delta_yaw_per_step = np.deg2rad(50)  # 5 degrees per step
+
+    #     for k in range(self.N+1):
+    #         yaw_ref = yaw0 + k * delta_yaw_per_step  # yaw increasing each step (right turn)
+
+    #         # Position along the circular arc
+    #         x_ref = x0 - radius * np.sin(yaw_ref) + radius * np.sin(yaw0)
+    #         y_ref = y0 + radius * np.cos(yaw_ref) - radius * np.cos(yaw0)
+
+    #         ref[:,k] = [x_ref, y_ref, yaw_ref, self.max_speed]
+
+    #     return ref
+
 
     def get_reference_trajectory(self):
         _, idx = self.waypoint_tree.query(self.current_pose[:2])
@@ -140,6 +179,7 @@ class MPCController:
         self.Cd = f*self.dt - (A@x_ref + B@u_ref)*self.dt
 
     def odom_callback(self, msg):
+        print("[ODOM CALLBACK CALLED]")
         q = msg.pose.pose.orientation
         _,_,yaw = tf.transformations.euler_from_quaternion(
                      [q.x,q.y,q.z,q.w])
@@ -150,17 +190,21 @@ class MPCController:
             msg.twist.twist.linear.x
         ])
 
-        # build ref + linearize
+        # build ref + linearizelectrical & Computer Eng Bldg W 05/14/2025 7:0
         ref = self.get_reference_trajectory()
         self.x0.value       = self.current_pose
         self.ref_traj.value = ref
+        if self.current_pose[3] < 0.05:
+            self.current_pose[3] = 0.05
+
         self.linearize_dynamics(self.current_pose,
                                 np.array([0.0,0.0]))
         self.Ad_p.value = self.Ad
         self.Bd_p.value = self.Bd
         self.Cd_p.value = self.Cd
 
-        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=True)
+        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=False)
+        print(f"accel: {self.u.value[1,0]}, angle: {self.u.value[0,0]}")
         if self.prob.status not in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
             rospy.logwarn("MPC solve failed")
             return
@@ -171,9 +215,9 @@ class MPCController:
                         0, self.max_speed)
 
         cmd = AckermannDrive()
-        cmd.steering_angle = steer
+        cmd.steering_angle = -steer
         cmd.speed          = speed
-        # self.drive_pub.publish(cmd)
+        self.drive_pub.publish(cmd)
 
 if __name__=='__main__':
     try:
