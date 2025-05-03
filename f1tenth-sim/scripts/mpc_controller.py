@@ -9,6 +9,7 @@ import tf
 from scipy.spatial import KDTree
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDrive
+from geometry_msgs.msg import PointStamped
 
 class MPCController:
     def __init__(self):
@@ -27,11 +28,17 @@ class MPCController:
         self.R  = np.diag([100., 10.])
         self.Rd = np.diag([10., 1.])
 
-        
+        #Obstacles
+        self.obstacles = []
+        self.obstacle_radius = 0.5
+        self.safety_margin  = 0.3
 
         # state + waypoints
         self.current_pose = np.zeros(4)
         self.read_waypoints()   # loads self.waypoints + self.waypoint_tree
+
+        #Obstacle Subscriber
+        rospy.Subscriber('/obstacles', PointStamped, self.obstacle_callback)
 
         # build MPC QP
         self.setup_mpc()
@@ -44,6 +51,11 @@ class MPCController:
         self.drive_pub = rospy.Publisher('/car_1/offboard/command',
                                          AckermannDrive,
                                          queue_size=1)
+
+    def obstacle_callback(self, msg):
+        """ Keep only the most recent obstacle. """
+        self.obstacles = [(msg.point.x, msg.point.y)]
+
 
     def read_waypoints(self):
         fn = os.path.join(os.path.dirname(__file__),
@@ -85,8 +97,24 @@ class MPCController:
         self.Bd_p     = cp.Parameter((4,2))
         self.Cd_p     = cp.Parameter(4)
 
+        self.hs_param = cp.Parameter((2,3))
+
         cost = 0
         cons = [ self.x[:,0] == self.x0 ]
+
+        #obstacle avoidance constraints
+        for k in range(self.N+1):
+            # x_k, y_k
+            cons += [
+              self.hs_param[0,0]*self.x[0,k]
+            + self.hs_param[0,1]*self.x[1,k]
+            + self.hs_param[0,2] <= 0,
+              self.hs_param[1,0]*self.x[0,k]
+            + self.hs_param[1,1]*self.x[1,k]
+            + self.hs_param[1,2] <= 0
+            ]
+
+
         for k in range(self.N):
             cost += cp.quad_form(self.x[:,k]   - self.ref_traj[:,k], self.Q)
             cost += cp.quad_form(self.u[:,k], self.R)
@@ -105,7 +133,7 @@ class MPCController:
                     #   self.x[3,k]           <= self.max_speed]
 
         cost += cp.quad_form(self.x[:,self.N] - self.ref_traj[:,self.N], self.Q)
-        print(f"cons: {cons}")
+        # print(f"cons: {cons}")
         self.prob = cp.Problem(cp.Minimize(cost), cons)
 
 
@@ -186,19 +214,37 @@ class MPCController:
         ])
         self.Cd = f*self.dt - (A@x_ref + B@u_ref)*self.dt
 
+    def compute_halfspaces(self, ox, oy, px, py):
+        """Returns two (a,b,c) triples."""
+        # 1) car→obs
+        dx, dy = ox-px, oy-py
+        dist = math.hypot(dx,dy)
+        if dist < 1e-3:
+            # no meaningful constraint
+            return (0,0, self.obstacle_radius+self.safety_margin), (0,0, 1e6)
+        dx,dy = dx/dist, dy/dist
+        # 2) perp normal
+        nx,ny = -dy, dx
+        # 3) offset so nx*ox + ny*oy + c = margin
+        margin = self.obstacle_radius + self.safety_margin
+        c1 = -(nx*ox + ny*oy) + margin
+        # second halfspace “always true”
+        return (nx,   ny,   c1), (0.0, 0.0, 1e6)
+    
     def odom_callback(self, msg):
         print("[ODOM CALLBACK CALLED]")
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _,_,yaw = tf.transformations.euler_from_quaternion(
                      [q.x,q.y,q.z,q.w])
         self.current_pose = np.array([
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
+            x,
+            y,
             yaw,
             msg.twist.twist.linear.x
         ])
 
-        # build ref + linearizelectrical & Computer Eng Bldg W 05/14/2025 7:0
         ref = self.get_reference_trajectory()
         self.x0.value       = self.current_pose
         self.ref_traj.value = ref
@@ -211,7 +257,22 @@ class MPCController:
         self.Bd_p.value = self.Bd
         self.Cd_p.value = self.Cd
 
-        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=False)
+
+        if self.obstacles:
+            ox, oy = self.obstacles[0]
+        else:
+            # no obstacle → a trivial “always‐true” pair
+            self.hs_param.value = np.array([[0,0,1e6],
+                                            [0,0,1e6]])
+        # if there is one obs:
+        if self.obstacles:
+            a1,b1,c1, a2,b2,c2 = (*self.compute_halfspaces(ox,oy, x,y)[0],
+                                 *self.compute_halfspaces(ox,oy, x,y)[1])
+            self.hs_param.value = np.array([[a1,b1,c1],
+                                            [a2,b2,c2]])
+            
+        
+        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=True)
         print(f"accel: {self.u.value[1,0]}, angle: {self.u.value[0,0]}")
         if self.prob.status not in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
             rospy.logwarn("MPC solve failed")
