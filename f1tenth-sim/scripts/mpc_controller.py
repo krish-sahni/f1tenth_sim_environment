@@ -18,20 +18,20 @@ class MPCController:
         # Vehicle params
         self.wheelbase  = 0.325     # m
         self.max_steer  = np.deg2rad(30)
-        self.max_speed  = 0.3       # m/s
+        self.max_speed  = 0.4       # m/s
         self.max_accel  = 3.0       # m/s²
         self.dt         = 0.1       # s
 
         # MPC params
         self.N  = 10
-        self.Q  = np.diag([10., 10., 5., 1.])
-        self.R  = np.diag([100., 10.])
+        self.Q  = np.diag([50., 50., 20., 5.])
+        self.R  = np.diag([50., 5.])
         self.Rd = np.diag([10., 1.])
 
         #Obstacles
-        self.obstacles = [(2.2,1.8)]
-        self.obstacle_radius = 0.5
-        self.safety_margin  = 0.3
+        self.obstacles = [(1.8101,1.6861)]
+        self.obstacle_radius = 0.3
+        self.safety_margin  = 0.1
 
         # state + waypoints
         self.current_pose = np.zeros(4)
@@ -125,10 +125,10 @@ class MPCController:
             x_next = ( self.Ad_p @ self.x[:,k]
                      + self.Bd_p @ self.u[:,k]
                      + self.Cd_p )
-            cons += [ self.x[:,k+1] == x_next]
-                    #   cp.abs(self.u[0,k])   <= self.max_steer,
-                    #   self.u[1,k]           <= self.max_accel,
-                    #   self.u[1,k]           >= -self.max_accel,
+            cons += [ self.x[:,k+1] == x_next,
+                      cp.abs(self.u[0,k])   <= self.max_steer,
+                      self.u[1,k]           <= self.max_accel,
+                      self.u[1,k]           >= -self.max_accel]
                     #   self.x[3,k]           >= -0.05,
                     #   self.x[3,k]           <= self.max_speed]
 
