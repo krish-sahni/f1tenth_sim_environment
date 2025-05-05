@@ -18,7 +18,7 @@ class MPCController:
         # Vehicle params
         self.wheelbase  = 0.325     # m
         self.max_steer  = np.deg2rad(30)
-        self.max_speed  = 0.5       # m/s
+        self.max_speed  = 0.3       # m/s
         self.max_accel  = 3.0       # m/s²
         self.dt         = 0.1       # s
 
@@ -29,7 +29,7 @@ class MPCController:
         self.Rd = np.diag([10., 1.])
 
         #Obstacles
-        self.obstacles = []
+        self.obstacles = [(2.2,1.8)]
         self.obstacle_radius = 0.5
         self.safety_margin  = 0.3
 
@@ -108,10 +108,10 @@ class MPCController:
             cons += [
               self.hs_param[0,0]*self.x[0,k]
             + self.hs_param[0,1]*self.x[1,k]
-            + self.hs_param[0,2] <= 0,
+            + self.hs_param[0,2] >= 0,
               self.hs_param[1,0]*self.x[0,k]
             + self.hs_param[1,1]*self.x[1,k]
-            + self.hs_param[1,2] <= 0
+            + self.hs_param[1,2] >= 0
             ]
 
 
@@ -215,21 +215,86 @@ class MPCController:
         self.Cd = f*self.dt - (A@x_ref + B@u_ref)*self.dt
 
     def compute_halfspaces(self, ox, oy, px, py):
-        """Returns two (a,b,c) triples."""
-        # 1) car→obs
-        dx, dy = ox-px, oy-py
-        dist = math.hypot(dx,dy)
-        if dist < 1e-3:
-            # no meaningful constraint
-            return (0,0, self.obstacle_radius+self.safety_margin), (0,0, 1e6)
-        dx,dy = dx/dist, dy/dist
-        # 2) perp normal
-        nx,ny = -dy, dx
-        # 3) offset so nx*ox + ny*oy + c = margin
-        margin = self.obstacle_radius + self.safety_margin
-        c1 = -(nx*ox + ny*oy) + margin
-        # second halfspace “always true”
-        return (nx,   ny,   c1), (0.0, 0.0, 1e6)
+        """Returns two (a,b,c) triples where the first is the left tangent line and the second is a dummy."""
+        # Current car position (px, py), yaw from current_pose
+        yaw = self.current_pose[2]
+        fx = px + 0.2 * math.cos(yaw)
+        fy = py + 0.2 * math.sin(yaw)
+        R = self.obstacle_radius + self.safety_margin
+
+        def get_tangents(ox, oy, fx, fy, R):
+            px_prime = fx - ox
+            py_prime = fy - oy
+            d_squared = px_prime**2 + py_prime**2
+            d = math.sqrt(d_squared)
+            if d < R:
+                return None, None
+            a = px_prime
+            b = py_prime
+            R_squared = R**2
+            sqrt_term = math.sqrt(d_squared - R_squared)
+            tx1_prime = (R_squared * a + R * b * sqrt_term) / d_squared
+            ty1_prime = (R_squared * b - R * a * sqrt_term) / d_squared
+            tx2_prime = (R_squared * a - R * b * sqrt_term) / d_squared
+            ty2_prime = (R_squared * b + R * a * sqrt_term) / d_squared
+            tx1 = tx1_prime + ox
+            ty1 = ty1_prime + oy
+            tx2 = tx2_prime + ox
+            ty2 = ty2_prime + oy
+            return (tx1, ty1), (tx2, ty2)
+
+        tangents = get_tangents(ox, oy, fx, fy, R)
+        if tangents[0] is None:
+            return (0.0, 0.0, 1e6), (0.0, 0.0, 1e6)
+        
+        (tx1, ty1), (tx2, ty2) = tangents
+
+        # Determine left tangent using cross product
+        dir_vec = (math.cos(yaw), math.sin(yaw))
+        vec1 = (tx1 - fx, ty1 - fy)
+        cross1 = dir_vec[0] * vec1[1] - dir_vec[1] * vec1[0]
+        vec2 = (tx2 - fx, ty2 - fy)
+        cross2 = dir_vec[0] * vec2[1] - dir_vec[1] * vec2[0]
+
+        tx, ty = None, None
+        if cross1 > 0 and cross2 > 0:
+            tx, ty = (tx1, ty1) if cross1 > cross2 else (tx2, ty2)
+        elif cross1 > 0:
+            tx, ty = tx1, ty1
+        elif cross2 > 0:
+            tx, ty = tx2, ty2
+        else:
+            return (0.0, 0.0, 1e6), (0.0, 0.0, 1e6)
+
+        # Line equation through (fx, fy) and (tx, ty)
+        a_line = ty - fy
+        b_line = -(tx - fx)
+        c_line = tx * fy - fx * ty
+
+        # Ensure valid region is outside the obstacle
+        value = a_line * ox + b_line * oy + c_line
+        if value > 0:
+            a_line, b_line, c_line = -a_line, -b_line, -c_line
+
+        return (a_line, b_line, c_line), (0.0, 0.0, 1e6)
+
+    # def compute_halfspaces(self, ox, oy, px, py):
+    #     """Returns two (a,b,c) triples."""
+    #     # 1) car→obs
+    #     dx, dy = ox-px, oy-py
+    #     dist = math.hypot(dx,dy)
+    #     print(f"dist: {dist}")
+    #     if dist < 1e-3:
+    #         # no meaningful constraint
+    #         return (0,0, self.obstacle_radius+self.safety_margin), (0,0, 1e6)
+    #     dx,dy = dx/dist, dy/dist
+    #     # 2) perp normal
+    #     nx,ny = -dy, dx
+    #     # 3) offset so nx*ox + ny*oy + c = margin
+    #     margin = self.obstacle_radius + self.safety_margin
+    #     c1 = -(nx*ox + ny*oy) + margin
+    #     # second halfspace “always true”
+    #     return (nx,   ny,   c1), (0.0, 0.0, 1e6)
     
     def odom_callback(self, msg):
         print("[ODOM CALLBACK CALLED]")
@@ -257,7 +322,7 @@ class MPCController:
         self.Bd_p.value = self.Bd
         self.Cd_p.value = self.Cd
 
-
+        print(f"obs: {self.obstacles}, x: {x}, y: {y}")
         if self.obstacles:
             ox, oy = self.obstacles[0]
         else:
@@ -270,9 +335,11 @@ class MPCController:
                                  *self.compute_halfspaces(ox,oy, x,y)[1])
             self.hs_param.value = np.array([[a1,b1,c1],
                                             [a2,b2,c2]])
+            print(f"a1,b1,c1: {a1},{b1},{c1}")
+            print(f"a2,b2,c2: {a2},{b2},{c2}")
             
         
-        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=True)
+        self.prob.solve(solver=cp.OSQP, warm_start=True, eps_abs=1e-3, eps_rel=1e-3, max_iter=5000, verbose=False)
         print(f"accel: {self.u.value[1,0]}, angle: {self.u.value[0,0]}")
         if self.prob.status not in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
             rospy.logwarn("MPC solve failed")

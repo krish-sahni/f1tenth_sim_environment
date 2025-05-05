@@ -19,7 +19,7 @@ loop_quit        = False
 # y_vel          = float(sys.argv[6])
 # z_vel          = float(sys.argv[7])
 # car_1_reset_pose = [-9.0, -5.0,  0.0]
-car_1_reset_pose = [ 11.4333,0.3127 , 0.0]
+car_1_reset_pose = [ 0.0,0.0 , 0.0]
 car_2_reset_pose = [-7.0, -5.0,  0.0]
 car_3_reset_pose = [-5.0, -5.0,  0.0]
 car_4_reset_pose = [-3.0, -5.0,  0.0]
@@ -57,7 +57,7 @@ def racecar_reset_state():
     # state_msg.pose.orientation.y = 0.0
     # state_msg.pose.orientation.z = 0.0
     # state_msg.pose.orientation.w = 0.0
-    yaw = 1.2
+    yaw = 0.75
     state_msg.pose.orientation.x = 0.0
     state_msg.pose.orientation.y = 0.0
     state_msg.pose.orientation.z = math.sin(yaw / 2.0)
