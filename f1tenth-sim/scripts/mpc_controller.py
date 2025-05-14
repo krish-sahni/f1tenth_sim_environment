@@ -29,7 +29,7 @@ class MPCController:
         self.Rd = np.diag([10., 1.])
 
         #Obstacles
-        self.obstacles = [(1.8101,1.6861)]
+        self.obstacles = []
         self.obstacle_radius = 0.3
         self.safety_margin  = 0.1
 
@@ -108,10 +108,10 @@ class MPCController:
             cons += [
               self.hs_param[0,0]*self.x[0,k]
             + self.hs_param[0,1]*self.x[1,k]
-            + self.hs_param[0,2] >= 0,
-              self.hs_param[1,0]*self.x[0,k]
-            + self.hs_param[1,1]*self.x[1,k]
-            + self.hs_param[1,2] >= 0
+            + self.hs_param[0,2] >= 0
+            #   self.hs_param[1,0]*self.x[0,k]
+            # + self.hs_param[1,1]*self.x[1,k]
+            # + self.hs_param[1,2] >= 0
             ]
 
 
@@ -213,7 +213,25 @@ class MPCController:
           0
         ])
         self.Cd = f*self.dt - (A@x_ref + B@u_ref)*self.dt
+    
+    def get_avoidance_side(self, ox, oy):
+        """Returns 'left' or 'right' based on waypoint positions."""
+        waypoint_x = self.ref_traj.value[0, :]  # X of all waypoints
+        waypoint_y = self.ref_traj.value[1, :]  # Y of all waypoints
+        
+        # Vector from obstacle to average waypoint
+        avg_x = np.mean(waypoint_x)
+        avg_y = np.mean(waypoint_y)
+        dx = avg_x - ox
+        dy = avg_y - oy
+        
+        # Cross product with car's heading
+        heading_vec = (math.cos(self.current_pose[2]), math.sin(self.current_pose[2]))
+        cross = dx * heading_vec[1] - dy * heading_vec[0]
+        return 'left' if cross > 0 else 'right'
 
+
+    
     def compute_halfspaces(self, ox, oy, px, py):
         """Returns two (a,b,c) triples where the first is the left tangent line and the second is a dummy."""
         # Current car position (px, py), yaw from current_pose
@@ -259,10 +277,14 @@ class MPCController:
         tx, ty = None, None
         if cross1 > 0 and cross2 > 0:
             tx, ty = (tx1, ty1) if cross1 > cross2 else (tx2, ty2)
+            txr, tyr = (tx2, ty2) if cross1 > cross2 else (tx1, ty1)
         elif cross1 > 0:
             tx, ty = tx1, ty1
+            txr, tyr = tx2, ty2
         elif cross2 > 0:
             tx, ty = tx2, ty2
+            txr, tyr = tx1, ty1
+
         else:
             return (0.0, 0.0, 1e6), (0.0, 0.0, 1e6)
 
@@ -271,30 +293,26 @@ class MPCController:
         b_line = -(tx - fx)
         c_line = tx * fy - fx * ty
 
+        a_line_right = tyr - fy
+        b_line_right = -(txr - fx)
+        c_line_right = txr * fy - fx * tyr
+
         # Ensure valid region is outside the obstacle
         value = a_line * ox + b_line * oy + c_line
         if value > 0:
             a_line, b_line, c_line = -a_line, -b_line, -c_line
 
-        return (a_line, b_line, c_line), (0.0, 0.0, 1e6)
+        value = a_line_right * ox + b_line_right * oy + c_line_right
+        if value > 0:
+            a_line_right, b_line_right, c_line_right = -a_line_right, -b_line_right, -c_line_right
+        
+        side = self.get_avoidance_side(ox,oy)
+        print(f"side: {side}")
+        if(side == 'right'):
+            return (0,0,1e6), (a_line_right, b_line_right, c_line_right)
+        elif(side == 'left'):
+            return (a_line, b_line, c_line), (0,0,1e6)
 
-    # def compute_halfspaces(self, ox, oy, px, py):
-    #     """Returns two (a,b,c) triples."""
-    #     # 1) car→obs
-    #     dx, dy = ox-px, oy-py
-    #     dist = math.hypot(dx,dy)
-    #     print(f"dist: {dist}")
-    #     if dist < 1e-3:
-    #         # no meaningful constraint
-    #         return (0,0, self.obstacle_radius+self.safety_margin), (0,0, 1e6)
-    #     dx,dy = dx/dist, dy/dist
-    #     # 2) perp normal
-    #     nx,ny = -dy, dx
-    #     # 3) offset so nx*ox + ny*oy + c = margin
-    #     margin = self.obstacle_radius + self.safety_margin
-    #     c1 = -(nx*ox + ny*oy) + margin
-    #     # second halfspace “always true”
-    #     return (nx,   ny,   c1), (0.0, 0.0, 1e6)
     
     def odom_callback(self, msg):
         print("[ODOM CALLBACK CALLED]")
